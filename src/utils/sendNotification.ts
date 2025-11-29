@@ -8,12 +8,13 @@ interface SendNotificationParams {
 }
 
 /**
- * Creates notification records in the database.
+ * Creates notification records in the database via Supabase Edge Function.
  * 
  * IMPORTANT: This function does NOT send FCM push notifications directly.
- * It only inserts notification records into the Supabase notifications table.
- * The database trigger (send_fcm_push_notification) will automatically send
- * exactly one FCM push notification per notification record inserted.
+ * It calls the Supabase Edge Function which inserts notification records into
+ * the notifications table. The database trigger (send_fcm_push_notification)
+ * will automatically send exactly one FCM push notification per notification
+ * record inserted.
  * 
  * @param userIds - Array of user IDs to notify
  * @param title - Notification title
@@ -30,27 +31,23 @@ export async function sendNotification({ userIds, title, body, noteId }: SendNot
     console.log('📤 Creating notification records for users:', userIds);
     console.log('📧 Title:', title, 'Body:', body);
 
-    // Create notification records for each user
+    // Call the Edge Function to create notification records
     // The database trigger will automatically send FCM push notifications
-    const notifications = userIds.map(userId => ({
-      user_id: userId,
-      title,
-      body,
-      note_id: noteId || null,
-      read: false,
-    }));
-
-    const { data, error } = await supabase
-      .from('notifications')
-      .insert(notifications)
-      .select();
+    const { data, error } = await supabase.functions.invoke('send-notification', {
+      body: {
+        userIds,
+        title,
+        body,
+        noteId,
+      },
+    });
 
     if (error) {
       console.error('❌ Error creating notification records:', error);
       return;
     }
 
-    console.log(`✅ Created ${data?.length || 0} notification record(s)`);
+    console.log(`✅ Created ${data?.count || 0} notification record(s)`);
     console.log('📱 FCM push notifications will be sent automatically by database trigger');
   } catch (error) {
     console.error('❌ Error creating notifications:', error);
