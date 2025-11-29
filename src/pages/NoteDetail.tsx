@@ -4,6 +4,7 @@ import { supabase, Task, Note, NoteShare, Profile } from '../lib/supabase';
 import { TaskItem } from '../components/TaskItem';
 import { ArrowLeft, Plus, Share2, Users, Archive, Edit3, Trash2, MoreVertical, X } from 'lucide-react';
 import { getNoteIcon, NOTE_ICON_LIST } from '../utils/noteIcons';
+import { sendNotification } from '../utils/sendNotification';
 
 type NoteDetailProps = {
   noteId: string;
@@ -203,7 +204,21 @@ export const NoteDetail = ({ noteId, onBack }: NoteDetailProps) => {
         .update({ updated_at: new Date().toISOString() })
         .eq('id', noteId);
 
-      // Notifications are now handled by Supabase trigger automatically
+      // Send notification to shared users
+      if (sharedUsers.length > 0) {
+        const otherUserIds = sharedUsers
+          .map(share => share.user_id)
+          .filter(userId => userId !== profile.id);
+
+        if (otherUserIds.length > 0) {
+          await sendNotification({
+            userIds: otherUserIds,
+            title: `${note?.title || 'Not'}`,
+            body: `${profile.first_name} yeni görev ekledi: "${newTask.trim()}"`,
+            noteId: noteId,
+          });
+        }
+      }
     } catch (error) {
       console.error('Error adding task:', error);
     }
@@ -232,7 +247,23 @@ export const NoteDetail = ({ noteId, onBack }: NoteDetailProps) => {
         .update({ updated_at: new Date().toISOString() })
         .eq('id', noteId);
 
-      // Notifications are now handled by Supabase trigger automatically
+      // Send notification when task is completed or uncompleted in a shared note
+      if (profile && note && sharedUsers.length > 0) {
+        const notifyUserIds = [
+          note.owner_id,
+          ...sharedUsers.map(s => s.user_id)
+        ].filter(id => id !== profile.id);
+
+        if (notifyUserIds.length > 0) {
+          const action = completed ? 'tamamladı' : 'tamamlanmamış olarak işaretledi';
+          await sendNotification({
+            userIds: notifyUserIds,
+            title: note.title,
+            body: `${profile.first_name} "${task.title}" görevini ${action}`,
+            noteId: noteId,
+          });
+        }
+      }
     } catch (error) {
       console.error('Error toggling task:', error);
     }
@@ -732,7 +763,15 @@ const ShareModal = ({ noteId, noteTitle, sharedUsers, onClose, onUpdate }: Share
       saveToRecent(email.toLowerCase().trim());
       setEmail('');
 
-      // Notifications are now handled by Supabase trigger automatically
+      // Send notification to the shared user
+      if (profile) {
+        await sendNotification({
+          userIds: [targetUser.id],
+          title: 'Yeni Paylaşım',
+          body: `${profile.first_name} ${profile.last_name} sizinle bir not paylaştı: ${noteTitle}`,
+          noteId: noteId,
+        });
+      }
 
       onUpdate();
     } catch (error: any) {
