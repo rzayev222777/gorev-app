@@ -13,16 +13,22 @@ function showDedupedNotification(title, options) {
   const body = options?.body || "";
   const now = Date.now();
 
-  if (
+  // İlk bildirim veya 3 saniyeden fazla geçmişse göster
+  const isDuplicate = 
+    lastNotification.title !== null &&
     lastNotification.title === title &&
     lastNotification.body === body &&
-    now - lastNotification.time < 3000 // 3 saniye
-  ) {
+    (now - lastNotification.time) < 3000; // 3 saniye
+
+  if (isDuplicate) {
     // Aynı bildirimi kısa sürede tekrar gösterme
-    return;
+    console.log('[firebase-messaging-sw.js] Duplicate notification ignored:', title);
+    return Promise.resolve();
   }
 
+  // Bildirimi göster ve son bildirimi kaydet
   lastNotification = { title, body, time: now };
+  console.log('[firebase-messaging-sw.js] Showing notification:', title);
   return self.registration.showNotification(title, options);
 }
 
@@ -50,7 +56,6 @@ messaging.onBackgroundMessage((payload) => {
     data: payload.data,
   };
 
-  console.log('[firebase-messaging-sw.js] Showing notification:', notificationTitle);
   return showDedupedNotification(notificationTitle, notificationOptions);
 });
 
