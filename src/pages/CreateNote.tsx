@@ -24,18 +24,10 @@ export const CreateNote = ({ onBack, onCreated }: CreateNoteProps) => {
     setLoading(true);
 
     try {
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('tr-TR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-      const titleWithDate = `${title.trim()} - ${dateStr}`;
-
       const { data, error } = await supabase
         .from('notes')
         .insert({
-          title: titleWithDate,
+          title: title.trim(),
           owner_id: profile.id,
           icon: selectedIcon,
           archived: false,
