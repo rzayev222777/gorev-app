@@ -14,18 +14,47 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// In-memory deduplication: track last shown notification
+let lastNotification = {
+  title: null,
+  body: null,
+  timestamp: 0
+};
+
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
   const notificationTitle = payload.notification?.title || 'Yeni Bildirim';
+  const notificationBody = payload.notification?.body || '';
+  const currentTime = Date.now();
+
+  // Check if this is a duplicate notification
+  const isDuplicate = 
+    lastNotification.title === notificationTitle &&
+    lastNotification.body === notificationBody &&
+    (currentTime - lastNotification.timestamp) < 3000; // 3 seconds
+
+  if (isDuplicate) {
+    console.log('[firebase-messaging-sw.js] Duplicate notification detected (same title/body within 3s) - ignoring');
+    return Promise.resolve();
+  }
+
+  // Update last notification info
+  lastNotification = {
+    title: notificationTitle,
+    body: notificationBody,
+    timestamp: currentTime
+  };
+
   const notificationOptions = {
-    body: payload.notification?.body || '',
+    body: notificationBody,
     icon: '/logogorev.png',
     badge: '/logogorev.png',
     data: payload.data,
   };
 
+  console.log('[firebase-messaging-sw.js] Showing notification:', notificationTitle);
   return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
