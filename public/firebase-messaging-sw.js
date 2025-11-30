@@ -2,6 +2,30 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
+// Basit duplicate önleyici: aynı title+body 3 sn içinde gelirse gösterme
+let lastNotification = {
+  title: null,
+  body: null,
+  time: 0,
+};
+
+function showDedupedNotification(title, options) {
+  const body = options?.body || "";
+  const now = Date.now();
+
+  if (
+    lastNotification.title === title &&
+    lastNotification.body === body &&
+    now - lastNotification.time < 3000 // 3 saniye
+  ) {
+    // Aynı bildirimi kısa sürede tekrar gösterme
+    return;
+  }
+
+  lastNotification = { title, body, time: now };
+  return self.registration.showNotification(title, options);
+}
+
 // This will be replaced with actual config from environment
 firebase.initializeApp({
   apiKey: "AIzaSyCOdYl83hq2gOIBQc72AFQHG2WjlPkgJmI",
@@ -14,48 +38,20 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// In-memory deduplication: track last shown notification
-let lastNotification = {
-  title: null,
-  body: null,
-  timestamp: 0
-};
-
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
   const notificationTitle = payload.notification?.title || 'Yeni Bildirim';
-  const notificationBody = payload.notification?.body || '';
-  const currentTime = Date.now();
-
-  // Check if this is a duplicate notification
-  const isDuplicate = 
-    lastNotification.title === notificationTitle &&
-    lastNotification.body === notificationBody &&
-    (currentTime - lastNotification.timestamp) < 3000; // 3 seconds
-
-  if (isDuplicate) {
-    console.log('[firebase-messaging-sw.js] Duplicate notification detected (same title/body within 3s) - ignoring');
-    return Promise.resolve();
-  }
-
-  // Update last notification info
-  lastNotification = {
-    title: notificationTitle,
-    body: notificationBody,
-    timestamp: currentTime
-  };
-
   const notificationOptions = {
-    body: notificationBody,
+    body: payload.notification?.body || '',
     icon: '/logogorev.png',
     badge: '/logogorev.png',
     data: payload.data,
   };
 
   console.log('[firebase-messaging-sw.js] Showing notification:', notificationTitle);
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  return showDedupedNotification(notificationTitle, notificationOptions);
 });
 
 // Handle notification clicks

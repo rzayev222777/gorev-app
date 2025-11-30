@@ -1,85 +1,71 @@
+// Firebase Cloud Messaging Service Worker
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
+// Basit duplicate önleyici: aynı title+body 3 sn içinde gelirse gösterme
+let lastNotification = {
+  title: null,
+  body: null,
+  time: 0,
+};
+
+function showDedupedNotification(title, options) {
+  const body = options?.body || "";
+  const now = Date.now();
+
+  if (
+    lastNotification.title === title &&
+    lastNotification.body === body &&
+    now - lastNotification.time < 3000 // 3 saniye
+  ) {
+    // Aynı bildirimi kısa sürede tekrar gösterme
+    return;
+  }
+
+  lastNotification = { title, body, time: now };
+  return self.registration.showNotification(title, options);
+}
+
+// This will be replaced with actual config from environment
 firebase.initializeApp({
-  apiKey: "AIzaSyAmiC-_61mzpWRwukPXPx1-5yV398aPBuA",
-  authDomain: "gorev-2a82b.firebaseapp.com",
-  projectId: "gorev-2a82b",
-  storageBucket: "gorev-2a82b.firebasestorage.app",
-  messagingSenderId: "230660017730",
-  appId: "1:230660017730:web:08213f5da34d994e2f67db"
+  apiKey: "AIzaSyCOdYl83hq2gOIBQc72AFQHG2WjlPkgJmI",
+  authDomain: "gorev-app-a2e47.firebaseapp.com",
+  projectId: "gorev-app-a2e47",
+  storageBucket: "gorev-app-a2e47.firebasestorage.app",
+  messagingSenderId: "1081003098799",
+  appId: "1:1081003098799:web:35d5ffd3e06fb1ba0f4ca0"
 });
 
 const messaging = firebase.messaging();
-const SW_INSTANCE_ID = Math.random().toString(36).substr(2, 9);
-const channel = new BroadcastChannel('fcm-notifications');
-const shownNotifications = new Set();
 
-console.log(`[SW-${SW_INSTANCE_ID}] Initialized`);
-
-self.addEventListener('install', (event) => {
-  console.log(`[SW-${SW_INSTANCE_ID}] Installing...`);
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-  console.log(`[SW-${SW_INSTANCE_ID}] Activating...`);
-  event.waitUntil(self.clients.claim());
-});
-
-channel.onmessage = (event) => {
-  if (event.data.type === 'NOTIFICATION_SHOWN') {
-    console.log(`[SW-${SW_INSTANCE_ID}] Got broadcast: ${event.data.key} shown by ${event.data.sender}`);
-    shownNotifications.add(event.data.key);
-  }
-};
-
+// Handle background messages
 messaging.onBackgroundMessage((payload) => {
-  console.log(`[SW-${SW_INSTANCE_ID}] FCM received:`, payload);
+  console.log('[sw.js] Received background message:', payload);
 
-  const notificationTitle = payload.notification?.title || 'New Notification';
-  const notificationBody = payload.notification?.body || '';
-  const dedupeKey = `${notificationTitle}|${notificationBody}`;
-
-  if (shownNotifications.has(dedupeKey)) {
-    console.warn(`[SW-${SW_INSTANCE_ID}] Already shown by another SW - SKIP`);
-    return Promise.resolve();
-  }
-
-  shownNotifications.add(dedupeKey);
-
-  channel.postMessage({
-    type: 'NOTIFICATION_SHOWN',
-    key: dedupeKey,
-    sender: SW_INSTANCE_ID
-  });
-
-  setTimeout(() => shownNotifications.delete(dedupeKey), 5000);
-
+  const notificationTitle = payload.notification?.title || 'Yeni Bildirim';
   const notificationOptions = {
-    body: notificationBody,
+    body: payload.notification?.body || '',
     icon: '/logogorev.png',
     badge: '/logogorev.png',
-    tag: `notif-${Date.now()}`,
-    data: payload.data || {},
-    vibrate: [200, 100, 200],
-    requireInteraction: false,
+    data: payload.data,
   };
 
-  console.log(`[SW-${SW_INSTANCE_ID}] SHOWING:`, notificationTitle);
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  console.log('[sw.js] Showing notification:', notificationTitle);
+  return showDedupedNotification(notificationTitle, notificationOptions);
 });
 
+// Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
+  console.log('[sw.js] Notification click:', event);
   event.notification.close();
 
-  const noteId = event.notification.data.noteId;
-  const url = noteId ? `/note/${noteId}` : '/';
+  const noteId = event.notification.data?.noteId;
+  const url = noteId ? `/?note=${noteId}` : '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes(url) && 'focus' in client) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
           return client.focus();
         }
       }
